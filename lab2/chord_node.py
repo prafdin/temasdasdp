@@ -1,5 +1,6 @@
 from ring_range import RingRange
 
+DEBUG = False
 
 def in_circle_range(key, start, end):
     return ring_range.in_range(start, end, key)
@@ -20,13 +21,14 @@ class ChordNode:
         self.id = id
         self.predecessor = self
         self.fingers = [Finger(self, i) for i in range(m)]
+        self.data = {}
 
     def join(self, another_node):
         self.init_finger_table(another_node)
         self.update_others(another_node)
 
     def init_finger_table(self, another_node):
-        self.set_successor(another_node.find_successor(self.fingers[1].start))
+        self.set_successor(another_node.find_successor(self.fingers[0].start))
         self.predecessor = self.get_successor().predecessor
         self.get_successor().predecessor = self
 
@@ -53,6 +55,8 @@ class ChordNode:
 
     def find_successor(self, node_id):
         predecessor = self.find_predecessor(node_id)
+        if predecessor.id == node_id:
+            return predecessor
         return predecessor.get_successor()
 
     def find_predecessor(self, node_id):
@@ -84,6 +88,32 @@ class ChordNode:
     def set_successor(self, new_successor):
         self.fingers[1].node = new_successor
 
+    def put_obj(self, key, obj):
+        p = self.find_predecessor(key)
+        p.data[key] = obj
+        s = p.get_successor()
+        s.data[key] = obj
+
+    def get_obj(self, key):
+        s = self.find_successor(key)
+        value = s.data.get(key)
+        i = M
+        while not value and i:
+            s = s.get_successor()
+            value = s.get(key)
+            i -= 1
+        return value
+
+    def leave_network(self):
+        left_bound = (self.id - 2 ** (m-1)) % 16
+        for i in range(left_bound, M + self.id):
+            some_s = self.find_predecessor(i%16).get_successor()
+            for j in range(len(some_s.fingers) - 1, 0, -1):
+                if some_s.fingers[j].node == self:
+                    some_s.fingers[j].node = self.get_successor()
+        self.get_successor().predecessor = self.predecessor
+        self.get_successor().data.update(self.data)
+
 
 m = 4  # GUID in bit
 M = 2**m  # Max nodes count
@@ -91,31 +121,48 @@ ring_range = RingRange(M)
 
 def tests():
     ch0 = ChordNode(0)
+
     ch6 = ChordNode(6)
-    ch8 = ChordNode(8)
-    ch3 = ChordNode(3)
-
     ch6.join(ch0)
-    # ch8.join(ch0)
-
     assert ch0.find_successor(3).id == 6
     assert ch0.find_successor(6).id == 6
     assert ch6.find_successor(3).id == 6
-    assert ch6.find_successor(6).id == 0
+    assert ch6.find_successor(6).id == 6
     assert ch6.find_successor(8).id == 0
     assert ch0.find_successor(8).id == 0
     assert ch0.find_successor(5).id == 6
     assert ch6.find_successor(5).id == 6
-    assert ch0.find_successor(0).id == 6
+    assert ch0.find_successor(0).id == 0
     assert ch0.find_successor(15).id == 0
 
+    ch8 = ChordNode(8)
     ch8.join(ch0)
     assert ch0.find_successor(7).id == 8
     assert ch0.find_successor(9).id == 0
 
+    ch3 = ChordNode(3)
     ch3.join(ch0)
     assert ch0.find_successor(2).id == 3
     assert ch0.find_successor(4).id == 6
+
+    ch0.put_obj(2, "obj1")
+    assert ch3.data[2] == "obj1"
+
+    ch3.put_obj(9, "obj2")
+    assert ch0.data[9] == "obj2"
+
+    ch3.put_obj(3, "obj3")
+    assert ch3.data[3] == "obj3"
+
+    ch2 = ChordNode(2)
+    ch2.join(ch0)
+    ch4 = ChordNode(4)
+    ch4.join(ch0)
+    ch4.leave_network()
+    assert ch0.fingers[-1].node.id == 6
+    assert ch2.fingers[2].node.id == 6
+
+
 
 if __name__ == '__main__':
     tests()
